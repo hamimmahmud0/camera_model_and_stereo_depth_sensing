@@ -18,7 +18,7 @@ def numerical_sort(value):
     parts[1::2] = map(int, parts[1::2])
     return parts
 
-def calibrate_camera(dir_path, l_prefix_name, r_prefix_name, size = 0.0254, width=9, height=6):
+def calibrate_camera(dir_path, l_prefix_name, r_prefix_name, size = 0.0254, width=14, height=7):
 
     o_points = np.zeros((height*width, 3), np.float32)
     o_points[:, :2] = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
@@ -29,8 +29,11 @@ def calibrate_camera(dir_path, l_prefix_name, r_prefix_name, size = 0.0254, widt
     img_points_l = []
     img_points_r = []
 
-    l_images = glob.glob(dir_path + '/' + l_prefix_name +'*.png')
-    r_images = glob.glob(dir_path + '/' + r_prefix_name +'*.png')
+    l_images = glob.glob(dir_path + '/' + l_prefix_name +'*.jpg')
+    r_images = glob.glob(dir_path + '/' + r_prefix_name +'*.jpg')
+
+    print(f'Total left images: {len(l_images)}')
+    print(f'Total right images: {len(r_images)}')
 
     l_images = sorted(l_images, key=numerical_sort)
     r_images = sorted(r_images, key=numerical_sort)
@@ -78,7 +81,11 @@ def stereo_calibrate(obj_points, img_points_l, img_points_r, img_size, matrix_l,
 
 def rectify_stereo_camera(matrix_1, dist_1, matrix_2, dist_2, R, T):
 
-    rotation_1, rotation_2, pose_1, pose_2, Q, roi_left, roi_right = cv2.stereoRectify(matrix_1, dist_1, matrix_2, dist_2, (9, 6), R, T)
+    rotation_1, rotation_2, pose_1, pose_2, Q, roi_left, roi_right = cv2.stereoRectify(matrix_1, dist_1, matrix_2, dist_2, (14, 7), R, T)
+
+
+    rotation_1 = np.linalg.inv(rotation_1)
+    rotation_2 = rotation_1 @ rotation_2
 
     return [rotation_1, rotation_2, pose_1, pose_2, Q, roi_left, roi_right]
 
@@ -177,7 +184,7 @@ def ssc(keypoints, num_ret_points, tolerance, cols, rows):
         selected_keypoints.append(keypoints[result_list[i]])
 
     return selected_keypoints
-
+"""old
 def detect_features_and_match(save_img_dir_path, l_image, r_image, matrix_l, matrix_r, dist_l, dist_r):
 
     l_img = cv2.imread(l_image)
@@ -209,8 +216,8 @@ def detect_features_and_match(save_img_dir_path, l_image, r_image, matrix_l, mat
     l_kp_img = cv2.drawKeypoints(l_undistorted_img, selected_kp_l, None, color=(255, 0, 0), flags = 0)
     r_kp_img = cv2.drawKeypoints(r_undistorted_img, selected_kp_r, None, color=(255, 0, 0), flags = 0)
 
-    cv2.imwrite(save_img_dir_path + '/' + 'ORB_Left.png', l_kp_img)
-    cv2.imwrite(save_img_dir_path + '/' + 'ORB_Right.png', r_kp_img)
+    cv2.imwrite(save_img_dir_path + '/' + 'ORB_Left.jpg', l_kp_img)
+    cv2.imwrite(save_img_dir_path + '/' + 'ORB_Right.jpg', r_kp_img)
 
     selected_kp_l, selected_des_l = orb.compute(l_kp_img, selected_kp_l)
     selected_kp_r, selected_des_r = orb.compute(r_kp_img, selected_kp_r)
@@ -222,10 +229,62 @@ def detect_features_and_match(save_img_dir_path, l_image, r_image, matrix_l, mat
 
     matched_img = cv2.drawMatches(l_kp_img, selected_kp_l, r_kp_img, selected_kp_r, matches[:30], None)
 
-    cv2.imwrite(save_img_dir_path +'/' + 'matched_feature_points.png', matched_img)
+    cv2.imwrite(save_img_dir_path +'/' + 'matched_feature_points.jpg', matched_img)
 
     return [selected_kp_l, selected_kp_r]
+"""  
+
+def detect_features_and_match(save_img_dir_path, l_image, r_image, matrix_l, matrix_r, dist_l, dist_r):
+
+    l_img = cv2.imread(l_image)
+    r_img = cv2.imread(r_image)
+    gray_l_img = cv2.cvtColor(l_img, cv2.COLOR_BGR2GRAY)
+    gray_r_img = cv2.cvtColor(r_img, cv2.COLOR_BGR2GRAY)
+
+    l_img_size = (l_img.shape[1], l_img.shape[0])
+    r_img_size = (r_img.shape[1], r_img.shape[0])
+
+    map_w, map_h = cv2.initUndistortRectifyMap(matrix_l, dist_l, None, None, l_img_size, cv2.CV_32FC1)
+    l_undistorted_img = cv2.remap(gray_l_img, map_w, map_h, cv2.INTER_LINEAR)
+
+    map_w, map_h = cv2.initUndistortRectifyMap(matrix_r, dist_r, None, None, r_img_size, cv2.CV_32FC1)
+    r_undistorted_img = cv2.remap(gray_r_img, map_w, map_h, cv2.INTER_LINEAR)
+
+    orb = cv2.ORB_create(nfeatures=2000, patchSize = 31)
+
+    kp_l = orb.detect(l_undistorted_img, None)
+    kp_r = orb.detect(r_undistorted_img, None)
+
+    # Convert keypoints to lists before shuffling
+    kp_l = list(kp_l)
+    kp_r = list(kp_r)
     
+    shuffle(kp_l)
+    shuffle(kp_r)
+
+    selected_kp_l = ssc(kp_l, 100, 0.25, l_img.shape[1], l_img.shape[0])
+    selected_kp_r = ssc(kp_r, 100, 0.25, r_img.shape[1], r_img.shape[0])
+
+    l_kp_img = cv2.drawKeypoints(l_undistorted_img, selected_kp_l, None, color=(255, 0, 0), flags=0)
+    r_kp_img = cv2.drawKeypoints(r_undistorted_img, selected_kp_r, None, color=(255, 0, 0), flags=0)
+
+    cv2.imwrite(save_img_dir_path + '/' + 'ORB_Left.jpg', l_kp_img)
+    cv2.imwrite(save_img_dir_path + '/' + 'ORB_Right.jpg', r_kp_img)
+
+    selected_kp_l, selected_des_l = orb.compute(l_undistorted_img, selected_kp_l)  # Use original image, not l_kp_img
+    selected_kp_r, selected_des_r = orb.compute(r_undistorted_img, selected_kp_r)  # Use original image, not r_kp_img
+         
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+
+    matches = bf.match(selected_des_l, selected_des_r)
+    matches = sorted(matches, key=lambda x: x.distance)
+
+    matched_img = cv2.drawMatches(l_kp_img, selected_kp_l, r_kp_img, selected_kp_r, matches[:30], None)
+
+    cv2.imwrite(save_img_dir_path + '/' + 'matched_feature_points.jpg', matched_img)
+
+    return [selected_kp_l, selected_kp_r]
+
 def triangulate_points(pose_1, pose_2, kp_l, kp_r):
 
     if len(kp_l)<len(kp_r):

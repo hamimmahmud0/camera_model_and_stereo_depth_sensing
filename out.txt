@@ -1,0 +1,9 @@
+Rectangle points:
+  Point 0: (820.80, 544.12)
+  Point 1: (821.09, 632.05)
+  Point 2: (909.41, 632.81)
+  Point 3: (910.30, 542.99)
+
+Crop region:
+  Coordinates: x=[815, 915], y=[537, 637]
+  Size: 100x100

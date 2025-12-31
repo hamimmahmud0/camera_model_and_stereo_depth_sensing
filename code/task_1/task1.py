@@ -1,11 +1,11 @@
 import numpy as np
 import cv2
 import glob
-import argparse
+import argparse, os
 
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TermCriteria_MAX_ITER, 30, 0.001)
 
-def calibrate_camera(dir_path, prefix_name, size = 0.0254, width=9, height=6):
+def calibrate_camera(dir_path, prefix_name, size = 0.0254, width=34, height=19):
     o_points = np.zeros((height*width, 3), np.float32)
     o_points[:, :2] = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
 
@@ -14,7 +14,8 @@ def calibrate_camera(dir_path, prefix_name, size = 0.0254, width=9, height=6):
     obj_points = []
     img_points = []
 
-    images = glob.glob(dir_path + '/' + prefix_name +'*.png')
+    images = glob.glob(dir_path + '/' + prefix_name +'*.jpg')
+    #print(images)
 
     for img_name in images:
         img = cv2.imread(img_name)
@@ -25,25 +26,33 @@ def calibrate_camera(dir_path, prefix_name, size = 0.0254, width=9, height=6):
         if ret is True:
             obj_points.append(o_points)
 
-            corners2 = cv2.cornerSubPix(gray_img, corners, (11, 11), (-1, -1), criteria)
+            corners2 = cv2.cornerSubPix(gray_img, corners, (35, 35), (-1, -1), criteria)
             img_points.append(corners2)
 
             img = cv2.drawChessboardCorners(img, (width, height), corners2, ret)
+        else:
+            print(f"Couldn't find corners for: {img_name}")
 
     ret, matrix, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, gray_img.shape[::-1], None, None)
     
+    print(f'RMS: {ret}')
+
     return [ret, matrix, dist, rvecs, tvecs, img]
 
 def remap_image(save_dir_path, img_path, matrix, dist, img_corners):
+    print("remap_image")
 
-    cv2.imwrite(save_dir_path + '/' + 'chessboard_corners.png', img_corners)
+    path = os.path.join(save_dir_path,'chessboard_corners.png')
+
+    cv2.imwrite(path, img_corners)
 
     img = cv2.imread(img_path)
     img_size = (img.shape[1], img.shape[0])
     map_w, map_h = cv2.initUndistortRectifyMap(matrix, dist, None, None, img_size, cv2.CV_32FC1)
     distort = cv2.remap(img, map_w, map_h, cv2.INTER_LINEAR)
 
-    cv2.imwrite(save_dir_path + '/' + 'calibrated_image.png', distort)
+    path = os.path.join(save_dir_path,'calibrated_image.png')
+    cv2.imwrite(path, distort)
 
 def save_parameters(dir_path, matrix, dist):
     saved_params = cv2.FileStorage(dir_path, cv2.FILE_STORAGE_WRITE)
